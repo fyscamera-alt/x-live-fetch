@@ -186,12 +186,6 @@ cp -r x-live-fetch ~/.claude/skills/      # Claude Code
 放到 **`~/.workbuddy/skills/x-live-fetch/`**（用户级，所有项目可用）即可，与从技能市场安装的技能同目录。
 放到项目的 `.workbuddy/skills/` 则只在该项目内生效。
 
-### 发布到 WorkBuddy 技能市场（SkillHub）
-
-目录结构（`{skill-name}/SKILL.md` + `references/` `scripts/` `templates/`）与本仓库一致，
-`SKILL.md` 的 frontmatter 已按平台要求补齐 `description_zh` / `description_en` / `version` / `author`。
-上架需要**你本人**在 [WorkBuddy 开放平台](https://open.workbuddy.cn/) 入驻并提交审核，本地无法代交。
-
 ---
 
 ## 费用
@@ -268,7 +262,6 @@ WebSocket 帧编解码（掩码 / 粘包 / 分片重组）与四种事件类型�
 ## 说明
 
 - 本项目只是一个 **twitterapi.io 的客户端封装**，与该服务无隶属关系，也不对其可用性与计费政策负责。
-- 注册地址：**https://twitterapi.io?ref=fysc666** —— 新用户注册即送 $0.1 免费额度，无需信用卡。
 - 请遵守 twitterapi.io 的服务条款与 X 的平台规则，仅将本项目用于合法用途。
 
 ## License
