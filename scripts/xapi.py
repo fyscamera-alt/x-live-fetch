@@ -277,7 +277,8 @@ def ws_connect(key: str, proxy: str | None = None, timeout: int = 25):
     要点（都踩过坑）：
       · `x-api-key` 放在握手 header，不走 query string
       · 一个 Key 只能有一条活跃连接，第二条会被 1008 拒绝
-      · 失败时返回 None 并把原因打在 stdout，交给调用方决定何时重连
+      · 失败时返回 (None, b"")，成功返回 (socket, 握手残留字节)——残留字节是
+        跟在 101 响应头后面到达的帧数据，必须交给帧循环，不能丢（粘包坑，CI 实测）
     """
     import base64
 
@@ -302,7 +303,7 @@ def ws_connect(key: str, proxy: str | None = None, timeout: int = 25):
             line = buf.split(b"\r\n")[0].decode("utf-8", "replace")
             if "200" not in line:
                 print("WS 代理 CONNECT 失败: " + line, flush=True)
-                return None
+                return None, b""
             sock = raw
         else:
             sock = socket.create_connection((WS_HOST, WS_PORT), timeout=timeout)
@@ -319,15 +320,24 @@ def ws_connect(key: str, proxy: str | None = None, timeout: int = 25):
             "User-Agent: x-live-fetch/1.0\r\n\r\n"
         )
         ss.sendall(handshake.encode())
-        head = ss.recv(8192).decode("utf-8", "replace").split("\r\n")[0]
+        # 响应头必须增量读完 —— 单次 recv 会把紧跟 101 到达的第一帧一起读进来，
+        # 只留第一行就把那帧静默丢了（Linux CI 抓到的真 bug：粘包时 ping 永远收不到）。
+        rbuf = b""
+        while b"\r\n\r\n" not in rbuf:
+            chunk = ss.recv(8192)
+            if not chunk:
+                break
+            rbuf += chunk
+        head = rbuf.split(b"\r\n")[0].decode("utf-8", "replace")
         if "101" not in head:
             print("WS 握手失败: " + head, flush=True)
             try:
                 ss.close()
             except Exception:
                 pass
-            return None
-        return ss
+            return None, b""
+        _, _, leftover = rbuf.partition(b"\r\n\r\n")  # 头之后的字节属于帧流，不能丢
+        return ss, leftover
     except Exception as e:  # noqa: BLE001
         print(f"WS 连接异常: {type(e).__name__}: {str(e)[:160]}", flush=True)
         try:
@@ -335,7 +345,7 @@ def ws_connect(key: str, proxy: str | None = None, timeout: int = 25):
                 raw.close()
         except Exception:
             pass
-        return None
+        return None, b""
 
 
 def ws_frames_from(buf: bytes):

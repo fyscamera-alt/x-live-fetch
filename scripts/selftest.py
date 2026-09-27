@@ -335,11 +335,11 @@ def _fake_server(port_holder, ready, obs):
     head = hs.decode("utf-8", "replace")
     obs["key_header"] = "x-api-key: " in head
     obs["upgrade"] = "Upgrade: websocket" in head
+    # 101 响应和第一个 ping 帧**故意一次性 sendall** —— 真实服务端完全可能把帧
+    # 粘在握手响应里发过来，客户端必须把头之后的字节交给帧循环而不是丢弃。
+    # （这一行曾在 Linux CI 上稳定复现：单次 recv 读握手会静默吞掉 ping。）
     conn.sendall(b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n"
-                 b"Connection: Upgrade\r\n\r\n")
-
-    # 协议级 ping → 客户端必须回带掩码的 pong
-    conn.sendall(_server_frame(0x9, b"hb-1"))
+                 b"Connection: Upgrade\r\n\r\n" + _server_frame(0x9, b"hb-1"))
     conn.settimeout(2.0)
     buf = b""
     try:

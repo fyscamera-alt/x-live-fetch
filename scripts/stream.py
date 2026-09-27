@@ -117,7 +117,7 @@ def rules_active(key, proxy) -> int:
 def session(sec: int, key: str, proxy, seen, tags: set[str], min_followers: int,
             out_f, quiet: bool) -> tuple[int, int]:
     """一次连接：收到 sec 秒或断线为止。返回 (新增推文数, 重复跳过数)。"""
-    ss = xapi.ws_connect(key, proxy)
+    ss, buf = xapi.ws_connect(key, proxy)
     if ss is None:
         return 0, 0
 
@@ -125,21 +125,24 @@ def session(sec: int, key: str, proxy, seen, tags: set[str], min_followers: int,
         print(f"已连接 {xapi.WS_HOST}{xapi.WS_PATH}，等待推文…（计划 {sec}s）", flush=True)
 
     n_new = n_dup = 0
-    buf = b""
     t_end = time.time() + sec
     try:
         while time.time() < t_end:
-            try:
-                ss.settimeout(max(1, min(45, t_end - time.time())))
-                chunk = ss.recv(65536)
-            except socket.timeout:
-                continue
-            if not chunk:
-                if not quiet:
-                    print("服务端关闭连接", flush=True)
-                break
-            buf += chunk
             frames, buf = xapi.ws_frames_from(buf)
+            if not frames:
+                # 缓冲里没有完整帧才去等新数据 —— 握手响应里粘带来的帧必须先处理，
+                # 否则服务端等 pong、我们等数据，两边互相等到超时（CI 在 Linux 上实测的坑）。
+                try:
+                    ss.settimeout(max(1, min(45, t_end - time.time())))
+                    chunk = ss.recv(65536)
+                except socket.timeout:
+                    continue
+                if not chunk:
+                    if not quiet:
+                        print("服务端关闭连接", flush=True)
+                    break
+                buf += chunk
+                continue
             for op, payload in frames:
                 if op == 0x9:                      # 协议级 ping → 必须回 pong（且要带掩码）
                     try:
