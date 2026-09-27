@@ -13,14 +13,6 @@ Agent：→ python scripts/fetch.py --ticker NVDA --hours 24
 
 ---
 
-> ### 用之前先看这条
->
-> 本 skill 需要一个 **twitterapi.io** 的 API Key。
-> 通过 👉 **https://twitterapi.io?ref=fysc666** 注册，**立送 $0.1 免费额度**
-> （= 10,000 credits，约 660 条推文），**无需信用卡** —— 不充值就能把它完整跑通。
-
----
-
 ## 为什么用它
 
 - **两种模式**：按需抓最新（REST）／真·秒级持续推送（WebSocket），按场景选。
@@ -252,7 +244,7 @@ x-live-fetch/
 python scripts/selftest.py
 ```
 
-**不需要 API Key、不联网、不花一分钱**，88 项断言覆盖 query 构造（时间窗必须落在 query 字符串里）、
+**不需要 API Key、不联网、不花一分钱**，129 项断言覆盖 query 构造（时间窗必须落在 query 字符串里）、
 抓取管线（去重 / 排序 / 渲染 / 空结果分支）、**字段契约（上面那张表与代码逐一对齐）**、
 看板（数据组装 / HTTP 接口 / 路径穿越防护 / 只读保证，起真服务打真请求）、
 WebSocket 帧编解码（掩码 / 粘包 / 分片重组）与四种事件类型解析、`--tag` 过滤语义。
