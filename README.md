@@ -1,5 +1,9 @@
 # x-live-fetch
 
+[![CI](https://github.com/fyscamera-alt/x-live-fetch/actions/workflows/ci.yml/badge.svg)](https://github.com/fyscamera-alt/x-live-fetch/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/)
+
 **给一个关键词或股票代码，实时抓取 X（推特）上的内容。**
 
 一个即插即用的 AI Agent Skill。零第三方依赖（纯 Python 标准库），零配置（一个 API Key 搞定），
