@@ -1,0 +1,13 @@
+# 统一 LF：SKILL.md 是 CRLF 时会被 WorkBuddy 的校验器误判为
+# “frontmatter 格式错误”，所以全仓文本一律保持 LF（包括 clone 出来的副本）。
+* text=auto eol=lf
+
+# Windows 专属脚本保留 CRLF（本仓库暂无，写上以防将来加）
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# 二进制
+*.png binary
+*.jpg binary
+*.gif binary
+*.zip binary

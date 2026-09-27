@@ -1,0 +1,23 @@
+# 密钥 —— 绝对不要提交
+.secrets/
+*.key
+.env
+.env.*
+
+# 运行产物
+out/
+*.jsonl
+x_live.jsonl
+raw_page*.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
