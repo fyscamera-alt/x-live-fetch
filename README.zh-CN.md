@@ -146,6 +146,24 @@ python scripts/rules.py off --tag nvda                                     # 用
 
 ---
 
+## LLM 解读（可选，不打分）
+
+把抓到的推文交给大模型做**内容解读**——这批推文在说什么、谁在说、分歧在哪。
+刻意**不打分、不评级、不输出情绪数值**，输出一篇结构化文章：
+总览 / 主要观点与叙事 / 分歧与对立 / 代表性原话（注明作者）/ 存疑与背景（事实性声明标注「未经核实」）。
+
+```bash
+python scripts/interpret.py --input out/nvda/tweets.json       # 对已有产物解读
+python scripts/fetch.py --ticker NVDA --hours 24 --interpret   # 抓完顺手解读
+```
+
+任意 OpenAI 兼容接口都行（`--api-base` + `--model`：DeepSeek / Kimi / GLM / OpenAI / 本地 Ollama）。
+LLM Key 与 twitterapi.io 的 Key 是两回事（`$X_LLM_API_KEY`、`.secrets/llm.key` 或 `--key`）。
+按 token 计费归你的 LLM 服务商，DeepSeek 一次解读通常不到一分钱。
+产物：`out/<查询>/interpretation.md`。**隐私**：推文正文会发给所选的 LLM 服务商。
+
+---
+
 ## 内容监控看板
 
 不想只盯着终端刷 Markdown？一条命令起个本地网页看板：
@@ -223,6 +241,7 @@ x-live-fetch/
 │   ├── fetch.py                # 模式 A：按需抓取 + 生成摘要
 │   ├── rules.py                # 过滤规则管理（增删改查 / 批量开关）
 │   ├── stream.py               # 模式 B：WebSocket 实时消费
+│   ├── interpret.py            # LLM 内容解读（不打分，自备 LLM Key）
 │   ├── dashboard.py            # 内容监控看板（本地只读服务）
 │   └── selftest.py             # 离线自检
 ├── README.md / README.zh-CN.md
@@ -230,6 +249,7 @@ x-live-fetch/
 └── out/                        # 运行产物（已 gitignore）
     ├── <查询>/digest.md         #   人看的摘要
     ├── <查询>/tweets.json      #   归一化后的结构化推文
+    ├── <查询>/interpretation.md #   LLM 内容解读（跑过 interpret.py 后出现）
     ├── <查询>/raw_pageN.json   #   API 原样响应（含全部字段）
     └── x_live.jsonl            #   模式 B 的实时流
 ```
@@ -244,8 +264,9 @@ x-live-fetch/
 python scripts/selftest.py
 ```
 
-**不需要 API Key、不联网、不花一分钱**，129 项断言覆盖 query 构造（时间窗必须落在 query 字符串里）、
+**不需要 API Key、不联网、不花一分钱**，141 项断言覆盖 query 构造（时间窗必须落在 query 字符串里）、
 抓取管线（去重 / 排序 / 渲染 / 空结果分支）、**字段契约（上面那张表与代码逐一对齐）**、
+LLM 解读（推文挑选 / 禁评分提示词 / 响应解析 / 落盘）、
 看板（数据组装 / HTTP 接口 / 路径穿越防护 / 只读保证，起真服务打真请求）、
 WebSocket 帧编解码（掩码 / 粘包 / 分片重组）与四种事件类型解析、`--tag` 过滤语义。
 改脚本后先跑它，CI 里也能直接跑。

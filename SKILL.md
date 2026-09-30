@@ -5,7 +5,7 @@ display_name_en: X Live Fetch
 description: "实时抓取 X（推特）推文，支持关键词与股票代码（cashtag）。Fetch tweets by keyword or stock ticker. 当用户说「X 上关于 XX 在聊什么」「推特上有没有人提 $NVDA」「帮我盯一下 XX 的讨论」时使用。Also for: X monitoring. 两种模式：按需抓取最新或 WebSocket 实时推送。数据源 twitterapi.io（按量付费，无需开发者账号）。X/Twitter monitoring, cashtag search, websocket tweet stream, X sentiment."
 description_zh: "给一个关键词或股票代码（cashtag），实时抓取 X（推特）上的相关推文，整理成可读的 Markdown 摘要与结构化 JSON。两种模式：按需抓取最新、或建过滤规则后经 WebSocket 秒级推送。零第三方依赖。"
 description_en: "Fetch real-time X (Twitter) content by keyword or stock ticker (cashtag) and turn it into a readable Markdown digest plus structured JSON. Two modes - on-demand search and WebSocket streaming. Zero third-party dependencies."
-version: 1.0.1
+version: 1.1.0
 author: fysc666
 ---
 
@@ -76,7 +76,7 @@ python scripts/fetch.py --ticker NVDA --hours 6 --pages 1
 摘要会直接打印在终端，同时落到 `out/nvda/digest.md`（目录名是查询的小写化），
 同目录另有 `tweets.json` 和原始响应。
 
-想要**网页界面边抓边看**，见第 4 节的「内容监控看板」——一条命令起服务。
+想要**网页界面边抓边看**，见第 5 节的「内容监控看板」——一条命令起服务。
 
 > **走到这一步就算跑通了。** 之后日常使用就是把 0.4 重复一遍（换关键词 / 标的 / 时间窗），
 > 需要真·秒级推送再进第 3 节。
@@ -206,7 +206,40 @@ from:elonmusk OR from:WholeMarsBlog
 
 ---
 
-## 4 · 内容监控看板（边抓边看）
+## 4 · LLM 解读：这批推文在说什么（可选，不打分）
+
+抓回来的 `tweets.json` 可以顺手交给大模型做**内容解读**——只回答「这批推文在说什么、
+谁在说、分歧在哪」，**不打分、不评级、不输出情绪数值**（那类数字看着客观，实际全是噪声）。
+产物是一篇结构化文章：总览 / 主要观点与叙事 / 分歧与对立 / 代表性原话（引用+作者）/
+存疑与背景（事实性声明标注「未经核实」）。
+
+```bash
+python scripts/interpret.py --input out/nvda/tweets.json          # 对已有产物做解读
+python scripts/fetch.py --ticker NVDA --hours 24 --interpret      # 抓完顺手解读
+```
+
+**需要一个任意 OpenAI 兼容服务的 Key**（与 twitterapi.io 的 Key 是两回事）：
+
+| 服务 | `--api-base` | `--model` |
+|---|---|---|
+| DeepSeek | `https://api.deepseek.com` | `deepseek-chat` |
+| Kimi | `https://api.moonshot.cn/v1` | `moonshot-v1-8k` |
+| 智谱 GLM | `https://open.bigmodel.cn/api/paas/v4` | `glm-4-flash` |
+| OpenAI | `https://api.openai.com/v1` | `gpt-4o-mini` |
+| 本地 Ollama | `http://127.0.0.1:11434/v1` | 随意（`--key ollama` 占位） |
+
+Key 交给脚本：`export X_LLM_API_KEY="…"` 或 `.secrets/llm.key` 文件，或 `--key` 传参。
+**费用**：按 token 计，与 twitterapi.io credits 无关（DeepSeek 一次解读通常不到一分钱）。
+**隐私**：推文正文会发给所选的 LLM 服务商。
+**代理**：默认继承环境变量（`HTTPS_PROXY`）——OpenAI 这类被墙服务先设好代理；
+DeepSeek / GLM / Ollama 不需要。产物：`out/<查询>/interpretation.md`。
+
+> 用户问「这些推文在讲什么」「帮我解读一下」「大家什么态度」时，跑这个；
+> 用户明确要打分/量化情绪时再自己另做，本 skill 不提供。
+
+---
+
+## 5 · 内容监控看板（边抓边看）
 
 > **给 agent 的硬指令：主动把这件事告诉用户。**
 > 用户要做实时监控、或要连续抓很多次时，**不用等他问** —— 直接说明可以开看板。
@@ -244,7 +277,7 @@ python scripts/dashboard.py --port 9000 --interval 2
 
 ---
 
-## 5 · 成本纪律（照做能省 90%）
+## 6 · 成本纪律（照做能省 90%）
 
 - **钱按「抓回来的条数」花，不按「调用次数」花**：1 条 = 15 credits ≈ $0.00015；
   **每次调用最低扣 15 credits**（返回 0 条也扣）。
@@ -259,7 +292,7 @@ python scripts/dashboard.py --port 9000 --interval 2
 
 ---
 
-## 6 · 最容易踩的坑
+## 7 · 最容易踩的坑
 
 - ⚠️ **时间窗必须写进 query 字符串**：`since_time:<unix秒> until_time:<unix秒>`。
   `since:`/`until:` 不支持；当 URL 参数传会被**静默忽略** —— 不报错，直接给你最新 20 条，看似正常实则全错。
@@ -276,24 +309,25 @@ python scripts/dashboard.py --port 9000 --interval 2
 
 ---
 
-## 7 · 完整接口契约
+## 8 · 完整接口契约
 
 见 `references/api-reference.md`：全部端点、请求 / 响应字段、WebSocket 事件格式、计费模型，
 以及进阶玩法（账号实时监控订阅、粉丝/关注抓取、发帖写操作等）。
 
-## 8 · 改完代码先跑自检
+## 9 · 改完代码先跑自检
 
 ```bash
 python scripts/selftest.py
 ```
 
-**不需要 API Key、不联网、不花一分钱**，88 项断言覆盖 query 构造、抓取管线（去重 / 排序 / 渲染）、
-**字段契约（第 2 节的字段表与代码逐一对齐）**、看板（数据组装 / HTTP 接口 / 路径穿越防护 / 只读保证，
-真正起服务打请求）、WebSocket 帧编解码（掩码 / 分片）与事件解析、`--tag` 过滤语义。
+**不需要 API Key、不联网、不花一分钱**，141 项断言覆盖 query 构造、抓取管线（去重 / 排序 / 渲染）、
+**字段契约（第 2 节的字段表与代码逐一对齐）**、LLM 解读（推文挑选 / 禁评分提示词 / 响应解析 / 落盘）、
+看板（数据组装 / HTTP 接口 / 路径穿越防护 / 只读保证，真正起服务打请求）、
+WebSocket 帧编解码（掩码 / 分片）与事件解析、`--tag` 过滤语义。
 改脚本后先跑它 —— 尤其是改了 `normalize()` / `normalize_stream()` 的字段，
 测试会立刻告诉你要同步更新第 2 节的表。
 
-## 9 · 文件结构
+## 10 · 文件结构
 
 ```
 x-live-fetch/
@@ -305,6 +339,7 @@ x-live-fetch/
 │   ├── fetch.py                ← 模式 A：按需抓取
 │   ├── rules.py                ← 过滤规则管理
 │   ├── stream.py               ← 模式 B：WebSocket 实时消费
+│   ├── interpret.py            ← LLM 内容解读（不打分，需自备 LLM Key）
 │   ├── dashboard.py            ← 内容监控看板（本地只读服务）
 │   └── selftest.py             ← 离线自检（免费，不需 Key）
 ├── README.md                   ← 面向 GitHub 的说明
@@ -312,6 +347,7 @@ x-live-fetch/
 └── out/                        ← 运行产物（已 gitignore）
     ├── <查询>/digest.md         ←   人看的摘要
     ├── <查询>/tweets.json      ←   归一化结构化推文（字段见第 2 节）
+    ├── <查询>/interpretation.md ←   LLM 内容解读（跑过 interpret.py 后出现）
     ├── <查询>/raw_pageN.json   ←   API 原样响应（含全部未归一化字段）
     └── x_live.jsonl            ←   模式 B 的实时流
 ```

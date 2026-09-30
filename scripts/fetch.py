@@ -225,6 +225,8 @@ def main():
     p.add_argument("--key", help="API Key（也可用环境变量或密钥文件）")
     p.add_argument("--proxy", help="显式代理，如 http://127.0.0.1:7890（默认直连）")
     p.add_argument("--quiet", action="store_true", help="只写文件，不打印摘要")
+    p.add_argument("--interpret", action="store_true",
+                   help="抓完顺手让 LLM 解读内容（需 OpenAI 兼容服务的 Key，见 scripts/interpret.py --help）")
     a = p.parse_args()
 
     if not (a.ticker or a.query or a.words):
@@ -260,6 +262,14 @@ def main():
     if not a.quiet:
         print(digest)
     print(f"\n---\n产物目录: {outdir}/  (digest.md / tweets.json / raw_page*.json)")
+    if a.interpret:
+        try:
+            import interpret  # noqa: E402
+
+            ok, msg = interpret.run(os.path.join(outdir, "tweets.json"), quiet=a.quiet)
+            print(("LLM 解读 · " if ok else "跳过 LLM 解读 · ") + msg, flush=True)
+        except Exception as e:  # noqa: BLE001
+            print(f"跳过 LLM 解读 · {type(e).__name__}: {e}", flush=True)
     if not a.quiet:
         print(
             "想看实时画面？另开一个终端跑  python scripts/dashboard.py\n"

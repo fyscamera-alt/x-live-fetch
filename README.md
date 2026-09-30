@@ -154,6 +154,26 @@ ready for downstream analysis).
 
 ---
 
+## LLM interpretation (optional, no scoring)
+
+Hand the fetched tweets to an LLM for a **content interpretation** — what this batch of tweets
+is actually saying, who says it, where they disagree. Deliberately **no scores, no ratings, no
+sentiment numbers** — just a structured write-up: overview / main narratives / disagreements /
+notable quotes (attributed) / caveats (factual claims marked "unverified").
+
+```bash
+python scripts/interpret.py --input out/nvda/tweets.json       # interpret an existing fetch
+python scripts/fetch.py --ticker NVDA --hours 24 --interpret   # fetch, then interpret in one go
+```
+
+Works with any OpenAI-compatible endpoint via `--api-base` + `--model`
+(DeepSeek / Kimi / GLM / OpenAI / local Ollama). LLM key is separate from the twitterapi.io key
+(`$X_LLM_API_KEY`, `.secrets/llm.key`, or `--key`). Token-billed by your LLM provider — a DeepSeek
+run typically costs well under one cent. Output: `out/<query>/interpretation.md`.
+Privacy note: tweet text is sent to whichever LLM provider you choose.
+
+---
+
 ## Monitoring dashboard
 
 Don't want to stare at Markdown in a terminal? One command starts a local web dashboard:
@@ -234,6 +254,7 @@ x-live-fetch/
 │   ├── fetch.py                # mode A: on-demand search + digest
 │   ├── rules.py                # filter-rule management (CRUD / bulk on-off)
 │   ├── stream.py               # mode B: WebSocket consumer
+│   ├── interpret.py            # LLM content interpretation (no scoring, bring your own LLM key)
 │   ├── dashboard.py            # monitoring dashboard (local read-only server)
 │   └── selftest.py             # offline self-test
 ├── README.md / README.zh-CN.md
@@ -241,6 +262,7 @@ x-live-fetch/
 └── out/                        # runtime output (gitignored)
     ├── <query>/digest.md        #   human-readable digest
     ├── <query>/tweets.json     #   normalized structured tweets
+    ├── <query>/interpretation.md # LLM content interpretation (after interpret.py)
     ├── <query>/raw_pageN.json  #   verbatim API responses (all fields)
     └── x_live.jsonl            #   mode B live stream
 ```
@@ -255,9 +277,10 @@ Requires **Python 3.8+**, no third-party dependencies.
 python scripts/selftest.py
 ```
 
-**No API key, no network, no cost.** 129 assertions cover query construction (time windows must
+**No API key, no network, no cost.** 141 assertions cover query construction (time windows must
 live in the query string), the fetch pipeline (dedup / sort / render / empty-result branches),
 **the field contract (the table above is checked against the code line by line)**,
+the LLM interpretation (tweet selection / no-scoring prompt / response parsing / output),
 the dashboard (data assembly / HTTP endpoints / path-traversal protection / read-only guarantee,
 against a real server over real requests), WebSocket frame codec (masking / coalescing /
 fragment reassembly) and all four event types, plus `--tag` filter semantics.

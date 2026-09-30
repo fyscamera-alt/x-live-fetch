@@ -12,6 +12,8 @@
                   connected/ping/tweet/fast_tweet 事件解析、--tag 过滤语义
   ⑥ frontmatter —— SKILL.md 头部 YAML 可被真解析器解析（平台侧会报错，
                   官方 quick_validate.py 只做正则、查不出这类问题）
+  ⑦ LLM 解读   —— 推文挑选（剔转推/去重/互动排序）、提示词硬性禁评分、
+                  围栏响应解析、产物落盘、无 Key 分支（transport 注入，全程离线）
 
 CI 里也能直接跑（退出码非 0 即失败）。
 """
@@ -35,6 +37,7 @@ sys.path.insert(0, os.path.join(ROOT, "scripts"))
 
 import dashboard  # noqa: E402
 import fetch   # noqa: E402
+import interpret  # noqa: E402
 import stream  # noqa: E402
 import xapi    # noqa: E402
 
@@ -513,12 +516,100 @@ def test_frontmatter():
 
 
 # ==========================================================================
+# ⑦ LLM 解读（transport 注入假响应，全程离线）
+# ==========================================================================
+def test_interpret(tmp):
+    inp = os.path.join(tmp, "nvda")
+    os.makedirs(inp, exist_ok=True)
+
+    def tw(i, author, text, like, ts, is_rt=False):
+        return {"id": str(i), "url": "https://x.com/x/status/" + str(i), "text": text,
+                "author": author, "time": "2026-09-30 10:00", "ts": ts,
+                "like": like, "rt": like // 10, "reply": 3, "quote": 1,
+                "followers": 1000, "is_rt": is_rt}
+
+    tweets = [
+        tw(1, "aaa", "NVDA guidance looks strong, Blackwell demand is insane", 900, 5000),
+        tw(2, "bbb", "retweet shell", 0, 4999, is_rt=True),
+        tw(3, "ccc", "I think the run is priced in, careful here", 300, 4000),
+        tw(4, "ddd", "", 100, 3999),
+        tw(5, "eee", "just bought more $NVDA today", 50, 3998),
+    ]
+    with open(os.path.join(inp, "tweets.json"), "w", encoding="utf-8") as f:
+        json.dump({"label": "$NVDA", "query": "$NVDA since_time:1",
+                   "fetched_at": "2026-09-30 10:00:00",
+                   "count": len(tweets), "tweets": tweets}, f, ensure_ascii=False)
+
+    sel = interpret.select_tweets(tweets, 40)
+    check([t["author"] for t in sel] == ["aaa", "ccc", "eee"],
+          "解读挑选：剔纯转推/空文本，按互动排序")
+    sys_zh, user = interpret.build_messages(
+        sel, {"label": "$NVDA", "query": "q", "fetched_at": "t", "total": 5})
+    check("不要打分" in sys_zh and "不要评级" in sys_zh,
+          "提示词硬性禁止打分/评级（解读而非评分系统）")
+    check("@aaa" in user and "Blackwell" in user, "用户消息带作者与原文")
+    sys_en, _ = interpret.build_messages(
+        sel, {"label": "x", "query": "", "fetched_at": "", "total": 5}, lang="en")
+    check("Do not assign scores" in sys_en, "英文提示词同样禁评分")
+
+    check(interpret.extract_content(
+        {"choices": [{"message": {"content": "```markdown\n正文\n```"}}]}) == "正文",
+        "响应解析剥掉 markdown 围栏")
+
+    seen = {}
+
+    def fake_transport(payload, headers):
+        seen.update(payload=payload)
+        return 200, json.dumps({"choices": [{"message": {"content": "## 总览\n这是测试解读。"}}]})
+
+    ok, _msg = interpret.run(os.path.join(inp, "tweets.json"), key="test-key",
+                             model="test-model", api_base="https://llm.example/v1",
+                             quiet=True, transport=fake_transport)
+    check(ok, "run() 在假传输下成功")
+    check(seen["payload"]["model"] == "test-model"
+          and seen["payload"]["messages"][0]["role"] == "system",
+          "请求体带模型名与 system 消息")
+    outp = os.path.join(inp, "interpretation.md")
+    check(os.path.isfile(outp), "解读落盘 interpretation.md")
+    md = open(outp, encoding="utf-8").read()
+    check("这是测试解读" in md and "test-model" in md and "llm.example" in md,
+          "产物含正文与模型/服务商标识")
+    check("非投资建议" in md, "产物带免责声明")
+
+    jsonl = os.path.join(tmp, "stream.jsonl")
+    with open(jsonl, "w", encoding="utf-8") as f:
+        for t in tweets[:2]:
+            f.write(json.dumps({"event": "tweet",
+                                "tweet": {"id": t["id"], "text": t["text"],
+                                          "author": t["author"], "ts": t["ts"],
+                                          "like": t["like"]}},
+                               ensure_ascii=False) + "\n")
+    d = interpret.load_tweets(jsonl)
+    check(len(d["tweets"]) == 2 and d["tweets"][0]["author"] == "aaa",
+          "JSONL 输入（含 tweet 包装）可解析")
+
+    # 无 LLM Key：给出可执行提示并跳过（绝不联网、绝不崩溃）
+    old_cwd = os.getcwd()
+    saved = {name: os.environ.pop(name, None) for name in interpret.LLM_KEY_ENV}
+    try:
+        os.chdir(tmp)  # 避开仓库里的 .secrets 密钥文件
+        ok2, msg2 = interpret.run(os.path.join(inp, "tweets.json"))
+        check(not ok2 and "API Key" in msg2, "无 LLM Key 时给出可执行提示并跳过")
+    finally:
+        os.chdir(old_cwd)
+        for name, v in saved.items():
+            if v is not None:
+                os.environ[name] = v
+
+
+# ==========================================================================
 def main():
     xapi.setup_stdout()
     with tempfile.TemporaryDirectory() as tmp:
         test_query()
         test_fetch_pipeline(tmp)
         test_field_contract()
+        test_interpret(tmp)
         test_dashboard(tmp)
         test_ws_framing()
         test_ws_events()
